@@ -18,8 +18,24 @@
 param(
     [string]$Drive = "D",
     [string]$Hostname = "qnxpi-abhi",
-    [string]$Ssid = ""
+    [string]$Ssid = "",
+    # Copy the SSID of the network this laptop is connected to right now.
+    # Best way to get an iPhone hotspot name exactly right.
+    [switch]$UseCurrent
 )
+
+# netsh output must be decoded as UTF-8, or the curly apostrophe in iPhone
+# hotspot names gets mangled and the Pi looks for a network that doesn't exist.
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+if ($UseCurrent) {
+    $m = netsh wlan show interfaces | Select-String "^\s+SSID\s+:\s(.+)$" | Select-Object -First 1
+    if (-not $m) {
+        Write-Host "This laptop is not connected to any WiFi network." -ForegroundColor Red
+        exit 1
+    }
+    $Ssid = $m.Matches[0].Groups[1].Value.Trim()
+}
 
 $root = "${Drive}:\"
 if (-not (Test-Path (Join-Path $root "qnx_sdp.ifs"))) {
@@ -71,13 +87,16 @@ Write-Unix "qnx_config.txt" @(
     "WIFI_SSID=`"$Ssid`"",
     "WIFI_PASS=`"$pw`""
 )
+# wpa_supplicant accepts the SSID as unquoted hex bytes. That sidesteps every
+# encoding question for names containing characters like U+2019.
+$ssidHex = ([Text.Encoding]::UTF8.GetBytes($Ssid) | ForEach-Object { $_.ToString("x2") }) -join ""
 Write-Unix "wpa_supplicant.conf" @(
     "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev",
     "update_config=1",
     "country=CA",
     "",
     "network={",
-    "    ssid=`"$Ssid`"",
+    "    ssid=$ssidHex",
     "    psk=`"$pw`"",
     "    key_mgmt=WPA-PSK",
     "}"
@@ -87,4 +106,6 @@ $pw = $null
 
 Write-Host ""
 Write-Host "Written to ${Drive}: - hostname '$Hostname', SSID '$Ssid'." -ForegroundColor Green
+Write-Host ("SSID characters: " + (($Ssid.ToCharArray() | ForEach-Object { "U+{0:X4}" -f [int]$_ }) -join " "))
+Write-Host "(an iPhone hotspot name should contain U+2019, the curly apostrophe)"
 Write-Host "Eject the card safely, put it in the Pi, and power it on."
