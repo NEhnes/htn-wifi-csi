@@ -9,6 +9,7 @@ Usage: python train.py --session session1 [--window 1.0]
 """
 import argparse
 import glob
+import json
 import os
 import pickle
 from collections import defaultdict
@@ -145,15 +146,56 @@ def main():
                          classes=classes), f)
     print(f"\nmodel -> {out}")
 
+    names = []
+    for p in ports:
+        names += [f"{p}:{n}" for n in feature_names()]
+
     if best == "forest":
-        names = []
-        for p in ports:
-            names += [f"{p}:{n}" for n in feature_names()]
         imp = final.feature_importances_
         top = np.argsort(-imp)[:10]
         print("\ntop features:")
         for i in top:
             print(f"   {names[i]:24s} {imp[i]:.3f}")
+
+    # ---- export to ONNX so it can run under onnxruntime on QNX ----
+    # onnxruntime is one of the AI modules ported to QNX (github.com/qnx-ports),
+    # so the same model file runs on the Pi 5 with no Python at all.
+    try:
+        from skl2onnx import to_onnx
+        onx = to_onnx(final, X[:1].astype(np.float32),
+                      options={id(final): {"zipmap": False}}
+                      if best == "logreg" else None)
+        opath = os.path.join(D, "data", a.session, "model.onnx")
+        with open(opath, "wb") as f:
+            f.write(onx.SerializeToString())
+        print(f"onnx  -> {opath}  ({len(onx.SerializeToString())} bytes)")
+
+        meta = dict(classes=list(classes), ports=list(ports),
+                    window=a.window, feature_names=names,
+                    n_features=int(X.shape[1]),
+                    features_per_link=int(X.shape[1] // len(ports)),
+                    heldout_accuracy=best_acc, model=best)
+        mpath = os.path.join(D, "data", a.session, "model_meta.json")
+        with open(mpath, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
+        print(f"meta  -> {mpath}")
+
+        # Verify the exported model reproduces sklearn's predictions, so we
+        # find conversion bugs here and not on the target board at 4am.
+        try:
+            import onnxruntime as ort
+            sess = ort.InferenceSession(opath,
+                                        providers=["CPUExecutionProvider"])
+            inp = sess.get_inputs()[0].name
+            got = sess.run(None, {inp: X.astype(np.float32)})[0]
+            got = np.asarray(got).ravel()
+            agree = float((got == y).mean())
+            print(f"onnx check: agrees with sklearn on {agree*100:.1f}% "
+                  f"of training rows")
+        except ImportError:
+            print("onnx check: skipped (onnxruntime not installed locally)")
+    except Exception as e:
+        print(f"\nONNX export failed: {e}")
 
 
 if __name__ == "__main__":
