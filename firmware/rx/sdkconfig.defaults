@@ -1,0 +1,10 @@
+# CSI is off by default in ESP-IDF; this is the switch that matters.
+# (Verified needed: without it esp_wifi_set_csi_config() returns ESP_FAIL.)
+CONFIG_ESP_WIFI_CSI_ENABLED=y
+
+# Match the proven-good link rate (flash reads failed above this on this CP2102).
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Bigger RX buffers so we drop fewer frames while printing.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32

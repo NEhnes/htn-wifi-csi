@@ -1,0 +1,25 @@
+# build output
+.pio/
+build/
+*.elf
+*.o
+*.a
+sdkconfig.esp32dev
+
+# python
+__pycache__/
+*.pyc
+
+# NEVER COMMIT: badge flash dump contains personal identity (name, email,
+# phone, socials) and a Solana secret key. Same for its extracted strings.
+flash.bin
+esp32_flash.bin
+esp32_head.bin
+strings.txt
+
+# contains MAC addresses of third-party devices picked up while sniffing
+# ambient beacons - not ours to publish
+ambient.csv
+
+# vendor driver, redistributed separately
+cp210x/
