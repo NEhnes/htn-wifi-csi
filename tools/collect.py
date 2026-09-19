@@ -38,6 +38,15 @@ INSTRUCT = {
 }
 
 
+def instruction(cls):
+    """Zone labels (z1, z2, ...) get a generic prompt.
+
+    Mark the zones on the floor with tape BEFORE collecting, and stand on the
+    same mark every rep. The model can only be as good as the labels.
+    """
+    return INSTRUCT.get(cls, f"STAND ON ZONE MARK '{cls.upper()}'")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ports", default="COM4")
@@ -74,7 +83,7 @@ def main():
 
     for rep in range(a.reps):
         for cls in classes:
-            msg = INSTRUCT.get(cls, cls.upper())
+            msg = instruction(cls)
             for k in range(int(a.move), 0, -1):
                 print(f"  rep {rep+1}/{a.reps}  [{cls:6s}]  >>> {msg} <<<  "
                       f"{k:2d}s ", end="\r", flush=True)
